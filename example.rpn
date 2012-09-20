@@ -1,0 +1,142 @@
+5 value                   =>    5
+{ 3 } value               =>    3
+{ 3 6 + } value           =>    9
+{ { 3 6 + } } value       =>    { 3 6 + }
+{ { 3 6 + } } vvalue      =>    9
+{ { { 3 6 + } } } vvalue  =>    9 # vvalue recursively calls value till the argument is fully evaluated
+
+
+FalseValue TrueValue Conditional if
+FalseValue else TrueValue Conditional if
+# if (Conditional vvalue) is truthy            =>    TrueValue
+# if (Conditional vvalue) is not truthy        =>    FalseValue
+# in this case else is a no-op, it expands to nothing.
+
+5 8 true if => 8
+5 8 false if => 5
+{ 3 5 + } 6 true if value => 6 # The block is not evaluated at all in this case
+{ 3 5 + } 6 false if value => 8
+
+[A]{ 3 } value => [A]{ 3 } # Only 0-arity blocks get evaluated
+
+{ 3 5 + } dup => { 3 5 + } { 3 5 + }
+
+{ 3 } { 7 } + => 10 # built-in arithmetic and logical operators call vvalue on both arguments
+{ 3 5 + } dup + => 16 # Block is only evaluated once, 0-arity + immutability means the return value cannot change so the result is cached after the first evaluation
+{ 3 5 + } { 3 5 + } + => 16 # Both blocks are evaluated, multiple definitions of equivalent blocks still result in different blocks
+
+[First, Second]{ First Second First if } && def
+[First, Second]{ First Second First if } => [Second]{ [First]{ First Second First if } call }
+
+# now that && is def'd
+
+false true && => false true [Second]{ [First]{ First Second First if } call } call  # variables = < >
+              => true [First]{ First Second First if } call                         # variables = < Second: false >
+              => First Second First if                                              # variables = < Second: false, First: true >
+              => Second                                                             # variables = < Second: false, First: true >
+              => false                                                              # variables = < Second: false, First: true >
+
+true  true  && => true
+false true  && => false
+true  false && => false
+false false && => false
+
+{ false } { true } && => { false } { true } [Second]{ [First]{ First Second First if } call } call  # variables = < >
+                      => { true } [First]{ First Second First if } call                             # variables = < Second: { false } >
+                      => First Second First if                                                      # variables = < Second: { false }, First: { true } >
+                      => Second                                                                     # variables = < Second: { false }, First: { true } >
+                      => { false }                                                                  # variables = < Second: { false }, First: { true } >
+
+
+{ true  } { true  } && => { true  }
+{ false } { true  } && => { false }
+{ true  } { false } && => { false }
+{ false } { false } && => { false }
+
+[First, Second]{ Second First First if } || def
+
+{ true  } { true  } || => { true  }
+{ false } { true  } || => { true  }
+{ true  } { false } || => { true  }
+{ false } { false } || => { false }
+
+error # when error is called it errors the entire tree, should there be some exception handling?
+
+# wrap it in a block to allow conditional errors
+[Value] { true { error } Value 1 == if value } error_if_one def
+
+{
+    # new list
+    { [Getter]{ true { error } { error } Getter call } } create def
+
+    # prepend a value onto a list
+    [Value, List]{ [Getter] { false { List } { Value } Getter call } } unshift def
+
+    # the first value in a list
+    [List]{ [Empty, List, Value]{ Value value } List call } head def
+
+    # the rest of the values in a list
+    [List]{ [Empty, List, Value]{ List value } List call } tail def
+
+    # if a list is empty
+    [List]{ [Empty, List, Value]{ Empty } List call } empty? def
+} list namespace
+
+# sum of values in a list
+[List]{
+    [Acc, List]{
+            { Acc List list::head + List list::tail list_sum_inner }
+        else
+            Acc
+        List list::empty? if value
+    } list_sum_inner def
+    0 List list_sum_inner
+} list_sum def
+
+# max value of a pair of values
+[First, Second]{ First Second First Second < if } max def
+
+# max value in a list
+[List]{
+    {
+        [Acc, List]{
+                { Acc List list::head max List list::tail list_max_inner }
+            else
+                Acc
+            List list::empty? if value
+        } list_max_inner def
+        0 List list_max_inner
+    }
+    { error } List list::empty? if value
+} list_max def
+
+
+# value of Pascal's triangle at specified row and col
+[Col, Row]{
+        { Col Row 1 - pascal Col 1 - Row 1 - pascal + }
+    else
+        1
+    Row 0 == if else
+        0
+    Col Row > Col 0 < || if value
+} pascal def
+
+
+# if parantheses balance
+[Chars]{
+    [Char]{
+        0 -1 char ')' == if 1 char '(' == if
+    } charVal def
+
+    [Count, Chars]{
+            {Count Chars list::head charVal + Chars list::tail inner_balance }
+        else
+            false
+        Count 0 < if else
+            count 0 ==
+        Chars list::empty? if
+    } inner_balance def
+
+    0 Chars bal
+} balance def
+
