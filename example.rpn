@@ -18,6 +18,16 @@ FalseValue else TrueValue Conditional if
 { 3 5 + } 6 false if value => 8
 
 [A]{ 3 } value => [A]{ 3 } # Only 0-arity blocks get evaluated
+5 [A]{ 3 A + } call => 3 5 + => 8
+
+{ 3 6 + } call => 3 6 + => 9 # call on 0-arity blocks is equivalent to value
+
+3 5 [First Second]{ First First Second + * } call
+    => 3 5 [Second]{ [First]{ First First Second + * } call } call # multi-arity blocks get converted to a sequence of 1-arity blocks
+    => 3 [First]{ First First 5 + * } call # call substitutes
+    => 3 3 5 + * # call substitutes
+    => 3 8 * # expression is evaluated
+    => 24 # expression is evaluated
 
 { 3 5 + } dup => { 3 5 + } { 3 5 + }
 
@@ -25,40 +35,54 @@ FalseValue else TrueValue Conditional if
 { 3 5 + } dup + => 16 # Block is only evaluated once, 0-arity + immutability means the return value cannot change so the result is cached after the first evaluation
 { 3 5 + } { 3 5 + } + => 16 # Both blocks are evaluated, multiple definitions of equivalent blocks still result in different blocks
 
-[First, Second]{ First Second First if } && def
-[First, Second]{ First Second First if } => [Second]{ [First]{ First Second First if } call }
+[First Second]{ First Second First if } => [Second]{ [First]{ First Second First if } call }
 
-# now that && is def'd
-
-false true && => false true [Second]{ [First]{ First Second First if } call } call  # variables = < >
-              => true [First]{ First Second First if } call                         # variables = < Second: false >
-              => First Second First if                                              # variables = < Second: false, First: true >
-              => Second                                                             # variables = < Second: false, First: true >
-              => false                                                              # variables = < Second: false, First: true >
-
-true  true  && => true
-false true  && => false
-true  false && => false
-false false && => false
-
-{ false } { true } && => { false } { true } [Second]{ [First]{ First Second First if } call } call  # variables = < >
-                      => { true } [First]{ First Second First if } call                             # variables = < Second: { false } >
-                      => First Second First if                                                      # variables = < Second: { false }, First: { true } >
-                      => Second                                                                     # variables = < Second: { false }, First: { true } >
-                      => { false }                                                                  # variables = < Second: { false }, First: { true } >
+[First Second]{ First Second First if } andand def
 
 
-{ true  } { true  } && => { true  }
-{ false } { true  } && => { false }
-{ true  } { false } && => { false }
-{ false } { false } && => { false }
+andand => [Second]{ [First]{ First Second First if } call } call
+# def causes the preceding identifier to expand to the preceding block followed
+# by call
 
-[First, Second]{ Second First First if } || def
+false true andand
+    => false true [Second]{ [First]{ First Second First if } call } call
+    => true [First]{ First true First if } call
+    => false true false if
+    => false
 
-{ true  } { true  } || => { true  }
-{ false } { true  } || => { true  }
-{ true  } { false } || => { true  }
-{ false } { false } || => { false }
+true false andand
+    => true false [Second]{ [First]{ First Second First if } call } call
+    => true [First]{ First false First if } call
+    => true false true if
+    => false
+
+true  true  andand => true
+false true  andand => false
+true  false andand => false
+false false andand => false
+
+{ false } { true } andand
+    => { false } { true } [Second]{ [First]{ First Second First if } call } call
+    => { true } [First]{ First { true } First if } call
+    => { false } { true } { false } if
+    => { false } { true } false if
+    => { false }
+
+[Value]{ Value 1 - } -- def
+[Value]{ Value 1 + } ++ def
+
+
+{ true  } { true  } andand => { true  }
+{ false } { true  } andand => { false }
+{ true  } { false } andand => { false }
+{ false } { false } andand => { false }
+
+[First Second]{ Second First First if } oror def
+
+{ true  } { true  } oror => { true  }
+{ false } { true  } oror => { true  }
+{ true  } { false } oror => { true  }
+{ false } { false } oror => { false }
 
 error # when error is called it errors the entire tree, should there be some exception handling?
 
@@ -67,58 +91,59 @@ error # when error is called it errors the entire tree, should there be some exc
 
 {
     # new list
-    { [Getter]{ true { error } { error } Getter call } } create def
+    { [Getter]{ true { error } { create } Getter call } } create def
 
     # prepend a value onto a list
-    [Value, List]{ [Getter] { false { List } { Value } Getter call } } unshift def
+    [Value List]{ [Getter] { false { List } { Value } Getter call } } unshift def
 
     # the first value in a list
-    [List]{ [Empty, List, Value]{ Value value } List call } head def
+    [List]{ [Empty Tail Head]{ Head value } List call } head def
 
     # the rest of the values in a list
-    [List]{ [Empty, List, Value]{ List value } List call } tail def
+    [List]{ [Empty Tail Head]{ Tail value } List call } tail def
+
+    # the first value in a list then the rest of the list
+    [List]{ [Empty Tail Head]{ Head value Tail value } List call } split def
 
     # if a list is empty
-    [List]{ [Empty, List, Value]{ Empty } List call } empty? def
+    [List]{ [Empty Tail Head]{ Empty } List call } empty? def
 } list namespace
 
 # sum of values in a list
 [List]{
-    [Acc, List]{
-            { Acc List list::head + List list::tail list_sum_inner }
-        else
-            Acc
-        List list::empty? if value
+    [Acc Head Tail]{
+        { Acc Head + Tail list::split list_sum_inner }
+        { Acc Head + }
+        Tail list::empty? if value
     } list_sum_inner def
-    0 List list_sum_inner
+    0 List list::split list_sum_inner
 } list_sum def
 
 # max value of a pair of values
-[First, Second]{ First Second First Second < if } max def
+[First Second]{ First Second First Second < if } max def
 
 # max value in a list
 [List]{
-    {
-        [Acc, List]{
-                { Acc List list::head max List list::tail list_max_inner }
-            else
-                Acc
-            List list::empty? if value
-        } list_max_inner def
-        0 List list_max_inner
-    }
-    { error } List list::empty? if value
+    [Acc Head Tail]{
+        { Acc Head max Tail list::split list_max_inner }
+        { Acc Head max }
+        Tail list::empty? if value
+    } list_max_inner def
+
+    { 0 List list::split list_max_inner }
+    { error }
+    List list::empty? if value
 } list_max def
 
 
 # value of Pascal's triangle at specified row and col
-[Col, Row]{
+[Col Row]{
         { Col Row 1 - pascal Col 1 - Row 1 - pascal + }
     else
         1
     Row 0 == if else
         0
-    Col Row > Col 0 < || if value
+    Col Row > Col 0 < oror if value
 } pascal def
 
 
@@ -128,15 +153,248 @@ error # when error is called it errors the entire tree, should there be some exc
         0 -1 char ')' == if 1 char '(' == if
     } charVal def
 
-    [Count, Chars]{
+    [Count Chars]{
             {Count Chars list::head charVal + Chars list::tail inner_balance }
         else
             false
         Count 0 < if else
             count 0 ==
-        Chars list::empty? if
+        Chars list::empty? if value
     } inner_balance def
 
     0 Chars bal
 } balance def
 
+# how many ways to make `money` change from `coins`
+[Money, Coins]{
+      { Money Coins list::head - Coins countChange Money Coins list::tail countChange }
+  else
+      0
+  money 0 < Coins list::empty? || if else
+      1
+  money 0 == if value
+} countChange def
+
+
+
+
+
+# whether a function set contains an element
+[Set, Elem]{
+  Elem Set call
+} contains def
+
+# create a singleton set
+[Elem]{
+  [Value]{ Elem Value == }
+} singletonSet def
+
+# create the union set of two sets
+[Set, OtherSet]{
+  [Value]{ { Set Value contains } { OtherSet Value contains } || value }
+} union def
+
+# create the intersection set of two sets
+[Set, OtherSet]{
+  [Value]{ { Set Value contains } { OtherSet Value contains } && value }
+} intersect def
+
+# return the subset of a set for which a predicate holds
+[Set, Predicate]{
+  [Value]{ { Set Value contains } { Value Predicate call } && value }
+} filter def
+
+# return a set containing elements in the first set that are not in the second
+# set
+[Set, OtherSet]{
+  [Value]{ { Set Value contains } { OtherSet Value contains not } && value }
+} diff def
+
+# Whether all elements between -1000 and 1000 contained in a set are satisfied
+# by a predicate
+[Set, Predicate]{
+  [Value]{
+        { Value 1 + iter }
+    else
+        false
+    { Set Value contains Value Predicate call not && } if
+        true
+    Value 1000 > if value
+  } iter def
+  -1000 iter
+} forall def
+
+# Whether there exists an element between -100 and 1000 that satisfies a
+# predicate
+[Set, Predicate]{
+  Set [Value]{ Value Predicate call not } forall not
+} exists def
+
+# return a set that contains all elements of an existing set transformed by a
+# function
+[Set, Transform]{
+  [Value]{ Set [Test]{ Test Transform call Value == } exists }
+} map def
+
+
+
+[User, Text, Retweets]{
+  {
+    { User } user def
+    { Text } text def
+    { Retweets } retweets def
+  }
+} tweet def
+
+[TweetOne, TweetTwo]{
+  {
+    { TweetOne } one def
+    { TweetTwo } two def
+  }
+} tweet_pair def
+
+[Tweet]{
+  Tweet [Obj]{ { Obj [This]{ user } call } Obj bind call } call
+} get_user def
+
+[Tweet]{
+  Tweet.text
+} get_text def
+
+[TweetPair]{
+  TweetPair [Obj]{ Obj [This]{ one } call } Obj bind call } call
+  [Obj]{ Obj [This]{ user } call } Obj bind call } call
+} get_first_user def
+
+[TweetPair]{
+  TweetPair.one.text
+} get_first_text def
+
+# so A.b => A [O]{ O [This]{ b } call } O bind call } call
+# so A.b.c => (A.b).c
+#          => A.b [O]{ O [This]{ c } call } O bind call } call
+#          => A [O]{ O [This]{ b } call } O bind call } call [O]{ O [This]{ c } call } O bind call } call
+"user" "text" 5 tweet get_user
+
+{
+  {
+    { This.head This.tail.find_min_0 } find_min def
+
+    [Filter]{ Filter empty_tweet_set This.filter0 } filter def
+  }
+} tweet_set def
+
+{
+  {
+    [Tweet]{ false } contains? def
+    [Tweet]{ Tweet empty_tweet_set empty_tweet_set non_empty_tweet_set } include def
+    { true } is_empty? def
+    { error } head def
+    { error } tail def
+    [Tweet]{ This } remove def
+    [CurrentMin]{ CurrentMin } find_min_0 def
+    [Function]{ } foreach def
+  } tweet_set bind
+} empty_tweet_set def
+
+[Elem, Left, Right]{
+  {
+    [Tweet]{
+        true
+        Tweet Right.contains?
+      Elem.text Tweet.text < if
+        Tweet Left.contains?
+      Tweet.text Elem.text < if
+    } contains? def
+
+    [Tweet]{
+      { This }
+      { Elem Left Tweet Right.include non_empty_tweet_set }
+      Elem.text Tweet.text < if
+      { Elem Tweet Left.include Right non_empty_tweet_set }
+      Tweet.text Elem.text < if
+    } include def
+
+    { false } is_empty? def
+
+    { { Left.head } { Elem } Left.is_empty? if } head def
+    { { Elem Left.tail Right non_empty_tweet_set } { Right } Left.is_empty? if } head def
+
+    [Tweet]{
+        { Right Left.union }
+        { Elem Left Tweet Right.remove non_empty_tweet_set }
+      { Elem.text Tweet.text < } if
+        { Elem Tweet Left.remove Right non_empty_tweet_set }
+      { Tweet.text Elem.text < } if
+      value
+    } remove def
+
+    [CurrentMin]{
+        CurrentMin
+        This.head
+        This.head.retweets CurrentMin.retweets < if This.tail.find_min_0
+    } find_min_0 def
+
+    [Function]{
+      This.head Function call Function This.tail.foreach
+    } foreach def
+  } tweet_set bind
+} non_empty_tweet_set def
+
+
+# Reimplemented list
+{
+  {
+    [Value]{ This Value non_empty_list } unshift def
+    { This.head This.tail } split def
+  }
+} list def
+
+{
+  {
+    { error } head def
+    { error } tail def
+    { true } empty? def
+  } list bind
+} empty_list def
+
+[Tail, Head]{
+  {
+    { Head } head def
+    { Tail } tail def
+    { false } empty? def
+  } list bind
+} non_empty_list def
+
+[Elems Count]{
+  [Acc Count]{
+    { Acc } { Acc.unshift Count -- inner } Count 0 > if value
+  } inner def
+  Elems call empty_list Count inner
+} create_list def
+
+# reimplemented sum of values in a list
+[List]{
+    [Acc List]{
+        { Acc List.head + List.tail inner }
+        { Acc }
+        List.empty? if value
+    } inner def
+    0 List inner
+} list_sum def
+
+# reimplemented max value in a list
+[List]{
+    [Acc Head Tail]{
+        { Acc Head max Tail.split inner }
+        { Acc Head max }
+        Tail.empty? if value
+    } inner def
+
+    { 0 List.split inner }
+    { error }
+    List.empty? if value
+} list_max def
+
+{ 6 2 7 6 1 } 5 create_list list_max #=> 7
+{ 6 2 7 6 1 } 5 create_list list_sum #=> 22
