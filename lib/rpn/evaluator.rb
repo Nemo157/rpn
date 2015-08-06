@@ -1,6 +1,26 @@
 module Rpn
   module Construct
     class FunctionCall
+      attr_accessor :definition
+
+      def initialize definition
+        @definition = definition
+      end
+
+      def call context, process
+        arguments = context.stack.pop definition.arity
+        raise StandardError, "Not enough arguments available" unless arguments
+        case definition
+          when Construct::BuiltinFunctionDefinition then context.stack.push(*definition.func[context, process, *arguments])
+          else raise StandardError, "Unknown function definition type " + construct.inspect
+        end
+      end
+    end
+
+    class SpecialFunctionCall < FunctionCall
+    end
+
+    class FunctionDefinition
       attr_accessor :name, :arity
 
       def initialize name, arity
@@ -10,12 +30,16 @@ module Rpn
       end
     end
 
-    class BuiltinFunctionCall < FunctionCall
+    class BuiltinFunctionDefinition < FunctionDefinition
       attr_accessor :func
 
       def initialize name, func
-        super name, func.arity
+        super name, func.arity - 2
         @func = func
+      end
+
+      def to_s
+        return '[builtin]'
       end
     end
 
@@ -34,6 +58,13 @@ module Rpn
         @value = value
       end
     end
+
+    module Block
+      class Start
+      end
+      class End
+      end
+    end
   end
 
   class Evaluator
@@ -42,8 +73,10 @@ module Rpn
 
     def evaluate token, context
       case token
-        when Token::Number then Construct::Constant.new token.value
-        when Token::Identifier then context.find_identifier token
+        when Token::Number, Token::String then Construct::Constant.new token.value
+        when Token::Identifier then context.find_identifier token.text
+        when Token::Brace::Start then Construct::Block::Start.new
+        when Token::Brace::End then Construct::Block::End.new
         else raise StandardError, "Unknown token type " + token.inspect
       end
     end

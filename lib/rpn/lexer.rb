@@ -35,8 +35,7 @@ module Rpn
       ignore_whitespace
       case @stream.peekc
         when nil then nil
-        when "'" then read_character
-        when '"' then read_string
+        when /'|"/ then read_string
         when /[A-Z]/ then read_variable
         when /[0-9-]/ then read_number
         when /[\[\]{}]/ then read_bracket
@@ -54,6 +53,17 @@ module Rpn
       else
         Token::Number.new text
       end
+    end
+
+    def read_string
+      delimiter = @stream.getc
+
+      text = ""
+      text += @stream.getc until @stream.peekc == delimiter
+
+      @stream.getc # discard delimiter
+
+      Token::String.new text
     end
 
     def read_variable

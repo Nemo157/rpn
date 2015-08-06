@@ -1,11 +1,11 @@
 #!/usr/bin/env ruby
 
+require 'bundler/setup'
+
 require 'readline'
 require 'awesome_print'
 
 require_relative 'lib/rpn/processor.rb'
-
-stty_save = `stty -g`.chomp
 
 def each_line
   running = true
@@ -15,10 +15,10 @@ def each_line
         yield line
       end
       running = false
-    rescue Interrupt => e
+    rescue Interrupt
       puts
     rescue StandardError => e
-      warn e.message + "\n" + e.backtrace.map { |line| '    ' + line }.join("\n")
+      warn e.message + "\n" + e.backtrace.map { |trace_line| '    ' + trace_line }.join("\n")
     end
   end
 end
@@ -27,10 +27,11 @@ processor = Rpn::Processor.new
 
 each_line do |line|
   begin
-    processor.append_string line
-    processor.process
-    ap processor.result_stack
-  rescue Interrupt => e
+    unless line.empty?
+      processor.append_string line
+      processor.process
+    end
+  rescue Interrupt
     puts
   end
 end

@@ -16,6 +16,15 @@ module Rpn
       end
     end
 
+    class String
+      attr_accessor :text, :value
+
+      def initialize text
+        @text = text
+        @value = text
+      end
+    end
+
     class Number
       attr_accessor :text, :value
 
